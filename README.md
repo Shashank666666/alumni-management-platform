@@ -1,4 +1,4 @@
-# SIH FSD Project
+# SIH alumni-management-platform Project
 
 ## Project Overview
 This is a full-stack web application developed for the Smart India Hackathon (SIH).
