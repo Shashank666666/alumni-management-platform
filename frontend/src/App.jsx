@@ -7,7 +7,6 @@ import Events from './components/Events'
 import Fundraising from './components/Fundraising'
 import Login from './components/Login'
 import Profile from './components/Profile'
-
 function App() {
   const [activeTab, setActiveTab] = useState('home')
   const [isAuthenticated, setIsAuthenticated] = useState(false)
@@ -20,40 +19,39 @@ function App() {
   const prevActiveTab = useRef('home')
   const hasAnimated = useRef(false)
   const isDataLoaded = useRef(false)
-
   // Check if user is already logged in (from localStorage)
   useEffect(() => {
     const token = localStorage.getItem('authToken');
     const user = localStorage.getItem('currentUser');
-    
     if (token && user) {
       setIsAuthenticated(true);
       setCurrentUser(JSON.parse(user));
     }
   }, []);
-
   // Handle dashboard entry animation
   useEffect(() => {
     // Check if we're navigating to the dashboard FROM another tab
     if (activeTab === 'home' && prevActiveTab.current !== 'home') {
       // Reset animation flag when coming to dashboard
       hasAnimated.current = false;
+      // Reset animated amount to 0 to trigger animation from start
+      setAnimatedDonationAmount(0);
     }
     
     // Update previous active tab
     prevActiveTab.current = activeTab;
   }, [activeTab]);
-
   // Handle the animation when we have real data and are on the dashboard
   useEffect(() => {
-    // Only animate if we're on the dashboard, haven't animated yet, and we have real data
-    if (activeTab === 'home' && !hasAnimated.current && isDataLoaded.current) {
+    // Only animate if we're on the dashboard and we have real data
+    if (activeTab === 'home' && isDataLoaded.current && totalDonations > 0) {
       // Reset animated amount to 0 and start counting animation
       setAnimatedDonationAmount(0);
       
       // Animate from 0 to current total
       let start = 0;
       const end = parseFloat(totalDonations) || 0;
+      
       // Only animate if we have a meaningful amount
       if (end > 0) {
         const duration = 2000; // 2 seconds
@@ -77,22 +75,22 @@ function App() {
         hasAnimated.current = true;
       }
     }
-  }, [activeTab, totalDonations]);
-
+  }, [activeTab, totalDonations, isDataLoaded.current]);
   // Handle amount change animation (for live updates)
   useEffect(() => {
-    if (activeTab === 'home' && isDataLoaded.current) {
-      // Skip animation on initial load, only animate when value actually changes
-      if (animatedDonationAmount > 0) {
+    if (activeTab === 'home' && isDataLoaded.current && totalDonations > 0) {
+      // Animate when value actually changes significantly
+      if (Math.abs(totalDonations - animatedDonationAmount) > 100) {
         setIsAmountChanging(true);
         const timer = setTimeout(() => {
           setIsAmountChanging(false);
+          // Update the animated amount to match the new total
+          setAnimatedDonationAmount(totalDonations);
         }, 500);
         return () => clearTimeout(timer);
       }
     }
-  }, [totalDonations, activeTab, animatedDonationAmount]);
-
+  }, [totalDonations, activeTab, animatedDonationAmount, isDataLoaded.current]);
   // Fetch upcoming events count
   useEffect(() => {
     const fetchUpcomingEventsCount = async () => {
@@ -108,14 +106,11 @@ function App() {
         console.error('Network error when fetching upcoming events count:', error);
       }
     };
-
     fetchUpcomingEventsCount();
-    
     // Refresh the count every 30 seconds
     const interval = setInterval(fetchUpcomingEventsCount, 30000);
     return () => clearInterval(interval);
   }, []);
-
   // Fetch alumni count
   useEffect(() => {
     const fetchAlumniCount = async () => {
@@ -131,14 +126,11 @@ function App() {
         console.error('Network error when fetching alumni count:', error);
       }
     };
-
     fetchAlumniCount();
-    
     // Refresh the count every 30 seconds
     const interval = setInterval(fetchAlumniCount, 30000);
     return () => clearInterval(interval);
   }, []);
-
   // Fetch total donations raised
   useEffect(() => {
     const fetchTotalDonations = async () => {
@@ -149,11 +141,6 @@ function App() {
           setTotalDonations(data.total_raised);
           // Mark that we have real data
           isDataLoaded.current = true;
-          // Trigger animation if we're on the dashboard
-          if (activeTab === 'home' && !hasAnimated.current) {
-            // Force a re-render to trigger the animation effect
-            setActiveTab('home');
-          }
         } else {
           console.error('Failed to fetch total donations:', response.status, response.statusText);
         }
@@ -168,18 +155,15 @@ function App() {
     const interval = setInterval(fetchTotalDonations, 30000);
     return () => clearInterval(interval);
   }, []);
-
   const handleLoginSuccess = (token, user) => {
     // Save to localStorage
     localStorage.setItem('authToken', token);
     localStorage.setItem('currentUser', JSON.stringify(user));
-    
     // Update state
     setIsAuthenticated(true);
     setCurrentUser(user);
     setActiveTab('directory'); // Redirect to directory after login
   }
-
   const handleLogout = () => {
     // Remove from localStorage
     localStorage.removeItem('authToken');
@@ -192,13 +176,12 @@ function App() {
     // Reset animation flag so it triggers on next visit
     hasAnimated.current = false;
     isDataLoaded.current = false;
+    setAnimatedDonationAmount(0);
   }
-
   const handleRegistrationSuccess = () => {
     // Redirect to login page after successful registration
     setActiveTab('login');
   }
-
   const handleProfileUpdate = (updatedProfileData) => {
     // Update the current user data
     const updatedUser = {
@@ -209,7 +192,6 @@ function App() {
     // Also update in localStorage
     localStorage.setItem('currentUser', JSON.stringify(updatedUser));
   }
-
   const renderContent = () => {
     // If user is not authenticated, only show dashboard, login, and register
     if (!isAuthenticated && activeTab !== 'home' && activeTab !== 'register' && activeTab !== 'login') {
@@ -217,7 +199,6 @@ function App() {
       setActiveTab('home')
       return renderDashboard()
     }
-
     switch (activeTab) {
       case 'login':
         return <Login onLoginSuccess={handleLoginSuccess} />
@@ -237,16 +218,13 @@ function App() {
         return renderDashboard()
     }
   }
-
   const renderDashboard = () => {
     // Format the total donations as currency
     const formatCurrency = (amount) => {
       // Convert to number if it's a string
       const numAmount = typeof amount === 'string' ? parseFloat(amount) : amount;
-      
       // Handle invalid numbers
       if (isNaN(numAmount)) return '$0';
-      
       // Format as currency with K/M/B suffixes
       if (numAmount >= 1000000) {
         return `$${(numAmount / 1000000).toFixed(1)}M`;
@@ -256,14 +234,12 @@ function App() {
         return `$${numAmount.toFixed(0)}`;
       }
     };
-
     return (
       <div className="dashboard">
         <div className="dashboard-header">
           <h2>Welcome to AlumniConnect</h2>
           <p>Connect, Engage, and Grow with Your Alumni Network</p>
         </div>
-        
         <div className="dashboard-stats">
           <div className="stat-card">
             <div className="stat-icon">👥</div>
@@ -272,7 +248,6 @@ function App() {
               <p>Alumni Members</p>
             </div>
           </div>
-          
           <div className="stat-card">
             <div className="stat-icon">📅</div>
             <div className="stat-info">
@@ -280,18 +255,16 @@ function App() {
               <p>Upcoming Events</p>
             </div>
           </div>
-          
           <div className="stat-card">
             <div className="stat-icon">💰</div>
             <div className="stat-info">
               <h3 className={`fundraising-amount ${isAmountChanging ? 'changing' : ''}`}>
-                {activeTab === 'home' && isDataLoaded.current ? formatCurrency(animatedDonationAmount) : formatCurrency(totalDonations)}
+                {activeTab === 'home' && isDataLoaded.current && animatedDonationAmount > 0 ? formatCurrency(animatedDonationAmount) : formatCurrency(totalDonations || 0)}
               </h3>
               <p>Raised This Year</p>
             </div>
           </div>
         </div>
-        
         <div className="dashboard-features">
           <div className="feature-card">
             <div className="feature-icon">🎓</div>
@@ -307,7 +280,6 @@ function App() {
               Explore Directory
             </button>
           </div>
-          
           <div className="feature-card">
             <div className="feature-icon">🗓️</div>
             <h3>Events & Reunions</h3>
@@ -322,7 +294,6 @@ function App() {
               View Events
             </button>
           </div>
-          
           <div className="feature-card">
             <div className="feature-icon">💰</div>
             <h3>Fundraising</h3>
@@ -341,7 +312,6 @@ function App() {
       </div>
     )
   }
-
   const handleTabChange = (tab) => {
     // Allow access to home (dashboard), login, and registration pages for unauthenticated users
     if (tab === 'home' || tab === 'login' || tab === 'register') {
@@ -357,7 +327,6 @@ function App() {
     
     setActiveTab(tab)
   }
-
   return (
     <div className="App">
       <header className="App-header">
@@ -444,5 +413,4 @@ function App() {
     </div>
   )
 }
-
 export default App
